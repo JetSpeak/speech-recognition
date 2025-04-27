@@ -1,0 +1,100 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>Google Cloud Speech Recognition</title>
+  <script>
+    // Your API key from Google Cloud
+    const API_KEY = "YOUR_API_KEY_HERE";
+    
+    // Function to start recording
+    function startRecording() {
+      // Show recording status
+      document.getElementById('status').textContent = "Listening...";
+      
+      // Get audio from microphone
+      navigator.mediaDevices.getUserMedia({ audio: true })
+        .then(function(stream) {
+          // Create media recorder
+          const mediaRecorder = new MediaRecorder(stream);
+          const audioChunks = [];
+          
+          // Start recording
+          mediaRecorder.start();
+          
+          // Store audio data
+          mediaRecorder.addEventListener("dataavailable", event => {
+            audioChunks.push(event.data);
+          });
+          
+          // Set timeout to stop recording after 5 seconds
+          setTimeout(() => {
+            mediaRecorder.stop();
+          }, 5000);
+          
+          // When recording stops
+          mediaRecorder.addEventListener("stop", () => {
+            // Convert audio to base64
+            const audioBlob = new Blob(audioChunks);
+            const reader = new FileReader();
+            
+            reader.readAsDataURL(audioBlob);
+            reader.onloadend = function() {
+              const base64data = reader.result.split(',')[1];
+              
+              // Show processing status
+              document.getElementById('status').textContent = "Processing...";
+              
+              // Send to Google Cloud Speech API
+              fetch(`https://speech.googleapis.com/v1/speech:recognize?key=${API_KEY}`, {
+                method: 'POST',
+                headers: {
+                  'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({
+                  config: {
+                    languageCode: 'it-IT',
+                    model: 'default'
+                  },
+                  audio: {
+                    content: base64data
+                  }
+                })
+              })
+              .then(response => response.json())
+              .then(data => {
+                // Extract transcript
+                let transcript = "";
+                if (data.results && data.results.length > 0) {
+                  transcript = data.results[0].alternatives[0].transcript;
+                }
+                
+                // Send result back to Thunkable
+                window.parent.postMessage(transcript, '*');
+                
+                // Update status
+                document.getElementById('status').textContent = "Done! You said: " + transcript;
+              })
+              .catch(error => {
+                console.error('Error:', error);
+                window.parent.postMessage("ERROR", '*');
+                document.getElementById('status').textContent = "Error processing speech";
+              });
+            };
+          });
+        })
+        .catch(function(err) {
+          console.error('Error getting microphone:', err);
+          document.getElementById('status').textContent = "Error accessing microphone";
+          window.parent.postMessage("ERROR: Microphone access denied", '*');
+        });
+    }
+    
+    // Start recording when page loads
+    window.onload = startRecording;
+  </script>
+</head>
+<body style="font-family: Arial, sans-serif; text-align: center; padding: 20px;">
+  <h1>Italian Speech Recognition</h1>
+  <p id="status">Starting...</p>
+</body>
+</html>
